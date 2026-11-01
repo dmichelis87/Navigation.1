@@ -254,7 +254,7 @@ const NOAB = new Set(['20100-4.2']);   // εκεί ζητούνται οι ίδ�
 /* ---------- αποθήκευση (μόνο σε αυτή τη συσκευή) ---------- */
 const KEY = 'nav1-trapeza-v1';
 let MEM = null;
-function load() { try { const s = JSON.parse(localStorage.getItem(KEY)); if (s && s.v === 1) return s; } catch (e) {} return MEM || { v: 1, ans: {}, sel: null, kinds: ['k', 'a', 'c'], fs: 0 }; }
+function load() { let s = null; try { s = JSON.parse(localStorage.getItem(KEY)); } catch (e) {} if (!(s && s.v === 1)) s = MEM || { v: 1, ans: {}, sel: null, kinds: ['k', 'a', 'c'], fs: 0 }; s.seen = s.seen || {}; return s; }
 function save() { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) { MEM = S; } }
 let S = load();
 function record(id, score) {
@@ -391,6 +391,24 @@ function choice(opts, cur, onPick) {
 }
 const SECI = {}; DATA.sections.forEach((s, i) => SECI[s[0]] = i);
 const BYSEC = DATA.items.map((it, i) => [Math.min(...(it.filt ? it.rows.map(r => SECI[r.s]) : it.secs.map(s => SECI[s]))), DATA.themes[it.th].t, it.th, i, it]).sort((a, b) => a[0] - b[0] || a[1] - b[1] || a[2].localeCompare(b[2]) || a[3] - b[3]).map(x => x[4]);
+/* ---------- ίδιες ή σχεδόν ίδιες ερωτήσεις (επαναλαμβάνονται σε άλλα θέματα της τράπεζας) ---------- */
+const CL = (() => {
+  const norm = s => (s || '').replace(/<[^>]+>|⟨⟩/g, ' ').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  const words = s => norm(s).match(/[\p{L}\p{N}]+/gu) || [];
+  const its = DATA.items, par = its.map((_, i) => i);
+  const f = x => { while (par[x] !== x) { par[x] = par[par[x]]; x = par[x]; } return x; };
+  const ex = its.map(it => [it.q, ...(it.rows || []).map(r => r.t), ...(it.opts || []), it.ctx].map(s => words(s).join(' ')).join('|') + '|' + (it.img || ''));
+  const fz = new Set(['tf', 'mc', 'fill', 'fillp', 'open']);
+  const set = s => new Set(words(s).filter(w => w.length >= 3));
+  const tk = its.map(it => fz.has(it.k) ? set(it.q + (['mc', 'fill'].includes(it.k) ? ' ' + it.opts[it.a] : '')) : null);
+  const cx = its.map(it => set(it.ctx));   // ίδια ερώτηση με άλλο εισαγωγικό κείμενο = άλλη ερώτηση
+  const jac = (a, b) => { let n = 0; for (const w of a) if (b.has(w)) n++; return n / (a.size + b.size - n); };
+  for (let i = 0; i < its.length; i++) for (let j = i + 1; j < its.length; j++)
+    if (ex[i] === ex[j] || (tk[i] && tk[j] && tk[i].size && tk[j].size && (its[i].img || '') === (its[j].img || '') && (!cx[i].size || !cx[j].size || jac(cx[i], cx[j]) >= .6) && jac(tk[i], tk[j]) >= .75)) par[f(i)] = f(j);
+  const m = {}; its.forEach((it, i) => m[it.id] = its[f(i)].id); return m;
+})();
+const seenN = u => Math.min(...u.ids.map(id => S.seen[CL[id]] || 0));
+function markSeen(id) { if (!SES || SES.mode === 'proj') return; SES.seenM = SES.seenM || {}; if (SES.seenM[id]) return; SES.seenM[id] = 1; const c = CL[id]; S.seen[c] = (S.seen[c] || 0) + 1; save(); }
 function poolFor(sel, kinds) { return BYSEC.filter(it => kinds.has(GROUP[it.k]) && itemOK(it, sel)); }
 
 /* ---------- τυχαία επιλογή με διασπορά σε κεφάλαια και ενότητες ----------
@@ -412,23 +430,26 @@ function wpick(arr, w) {
   return arr[arr.length - 1];
 }
 const inc = (m, k) => m.set(k, (m.get(k) || 0) + 1);
-const newX = () => ({ th: new Set(), ch: new Map(), sec: new Map() });   // κοινή μνήμη ενός διαγωνίσματος
+const newX = () => ({ th: new Set(), cl: new Set(), ch: new Map(), sec: new Map() });   // κοινή μνήμη ενός διαγωνίσματος
 function spread(units, X, opt = {}) {
   const n = opt.n || Infinity, out = [], lc = new Map(), ls = new Map();
   let rest = units.slice();
   while (out.length < n && rest.length && !(opt.until && opt.until(out))) {
-    const fresh = rest.filter(u => !X.th.has(u.th));
-    let cand = fresh.length ? fresh : rest;
+    let cand = rest.filter(u => !u.ids.some(id => X.cl.has(CL[id])));   // όχι δεύτερη φορά η ίδια ερώτηση
+    if (!cand.length) cand = rest;
+    const m0 = Math.min(...cand.map(seenN)); cand = cand.filter(u => seenN(u) === m0);   // πρώτα όσες έχουν βγει λιγότερες φορές
+    const fresh = cand.filter(u => !X.th.has(u.th));
+    if (fresh.length) cand = fresh;
     if (opt.avoid) { const a = cand.filter(u => !u.secs.some(s => opt.avoid.has(s))); if (a.length) cand = a; }
     const G = {};
     for (const u of cand) ((G[u.ch] = G[u.ch] || {})[u.sec] = G[u.ch][u.sec] || []).push(u);
     const cks = Object.keys(G), c0 = Math.min(...cks.map(c => lc.get(c) || 0));
-    const c = wpick(cks, cks.map(c => Math.sqrt(Object.values(G[c]).flat().length) * Math.pow(.15, (lc.get(c) || 0) - c0) * Math.pow(.6, X.ch.get(c) || 0)));
+    const c = wpick(cks, cks.map(c => Object.values(G[c]).flat().length * Math.pow(.15, (lc.get(c) || 0) - c0) * Math.pow(.6, X.ch.get(c) || 0)));
     const sks = Object.keys(G[c]), s0 = Math.min(...sks.map(s => ls.get(s) || 0));
-    const s = wpick(sks, sks.map(s => Math.sqrt(G[c][s].length) * Math.pow(.1, (ls.get(s) || 0) - s0) * Math.pow(.5, X.sec.get(s) || 0)));
+    const s = wpick(sks, sks.map(s => G[c][s].length * Math.pow(.1, (ls.get(s) || 0) - s0) * Math.pow(.5, X.sec.get(s) || 0)));
     const us = G[c][s];
     const u = wpick(us, us.map(u => (opt.w ? opt.w(u) : 1) * (u.secs.some(x => x !== s && ls.has(x)) ? .2 : 1)));
-    out.push(u); X.th.add(u.th); inc(lc, u.ch); u.secs.forEach(x => inc(ls, x));
+    out.push(u); X.th.add(u.th); u.ids.forEach(id => X.cl.add(CL[id])); inc(lc, u.ch); u.secs.forEach(x => inc(ls, x));
     rest = rest.filter(v => v !== u && (!opt.ok || opt.ok(v, out)));
   }
   out.forEach(u => { inc(X.ch, u.ch); u.secs.forEach(x => inc(X.sec, x)); });
@@ -459,8 +480,9 @@ function buildExam(sel) {
   const sum = o => o.reduce((a, u) => a + u.p, 0);
   // Δ: ολόκληρο Θέμα 4ο της τράπεζας· όσα συνδυάζουν ενότητες έχουν τριπλάσια πιθανότητα
   const t4 = Object.values(DATA.themes).filter(th => th.t === 4 && th.items.every(id => whole(ITEM[id]))).map(th => mkUnit(th.items, sel));
-  P['Δ'] = t4.length ? [wpick(t4, t4.map(u => u.secs.length > 1 ? 3 : 1))] : [];
-  P['Δ'].forEach(u => { X.th.add(u.th); inc(X.ch, u.ch); u.secs.forEach(x => inc(X.sec, x)); });
+  const d0 = Math.min(...t4.map(seenN)), dm = t4.filter(u => seenN(u) === d0);
+  P['Δ'] = dm.length ? [wpick(dm, dm.map(u => u.secs.length > 1 ? 3 : 1))] : [];
+  P['Δ'].forEach(u => { X.th.add(u.th); u.ids.forEach(id => X.cl.add(CL[id])); inc(X.ch, u.ch); u.secs.forEach(x => inc(X.sec, x)); });
   // Γ: άσκηση υπολογισμών από άλλη ενότητα· αν βγει μικρή, συμπληρώνεται με δεύτερη (ή τρίτη) από άλλη ενότητα
   let gp = DATA.items.filter(it => it.k === 'calc' && whole(it) && it.secs.every(s => EXER.has(s))).map(u1);
   if (!gp.length) gp = DATA.items.filter(it => DATA.themes[it.th].t === 4 && whole(it)).map(u1);
@@ -881,6 +903,7 @@ ROUTES.quiz = app => {
   if (SES.mode === 'exam' && SES.end && !SES.done && !TIMER) { TIMER = setInterval(tick, 1000); tick(); }
   const it = ITEM[SES.items[SES.i]];
   const st = SES.ans[it.id] || (SES.ans[it.id] = {});
+  markSeen(it.id);
   if (SES.mode === 'exam') {
     if (SES.grading) return gradeView(app);
     setBar(`${SES.title} · ${SES.i + 1}/${SES.items.length}`);
