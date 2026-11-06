@@ -31,6 +31,9 @@ h2{font-size:1.15rem;margin:1.2rem 0 .5rem}
 .hero .k{font-size:.78rem;letter-spacing:.06em;text-transform:uppercase;opacity:.85}
 .hero h1{color:#fff;font-size:1.6rem}
 .hero .who{margin-top:.6rem;font-weight:700;color:#bfe3ff;font-size:.95rem}
+.hero .info{position:relative;z-index:1;margin-top:.75rem;background:rgba(255,255,255,.16);border:1px solid rgba(255,255,255,.45);color:#fff;border-radius:2rem;padding:.4rem .9rem;font-size:.85rem;font-weight:600;cursor:pointer;min-height:2.3rem}
+.hero .info:hover{background:rgba(255,255,255,.26)}
+#modal .dlg a{color:var(--sea);word-break:break-all}
 .hero svg{position:absolute;right:-.6rem;bottom:-.8rem;opacity:.16;width:7.5rem;height:7.5rem}
 .tiles{display:grid;grid-template-columns:1fr 1fr;gap:.7rem}
 .tile{background:var(--card);border:1px solid var(--line);border-radius:.9rem;padding:.9rem .85rem;text-align:left;cursor:pointer;display:flex;flex-direction:column;gap:.15rem;min-height:5.6rem;box-shadow:0 1px 2px rgba(0,0,0,.04)}
@@ -538,6 +541,8 @@ function render() {
 
 /* ---------- αρχική ---------- */
 const SHIP = '<svg viewBox="0 0 100 100" fill="#fff"><path d="M50 6l3 0 0 46 28 0-31-46zM47 14v38H22zM8 60h84l-12 22H22z"/><path d="M4 88c8 0 8-4 16-4s8 4 16 4 8-4 16-4 8 4 16 4 8-4 16-4 8 4 16 4v4c-8 0-8-4-16-4s-8 4-16 4-8-4-16-4-8 4-16 4-8-4-16-4-8 4-16 4z"/></svg>';
+const INFO = 'Τα θέματα προέρχονται και αντλήθηκαν από την πλατφόρμα της Τράπεζας Θεμάτων Διαβαθμισμένης Δυσκολίας που αναπτύχθηκε (MIS5070818-Τράπεζα θεμάτων Διαβαθμισμένης Δυσκολίας για τη Δευτεροβάθμια Εκπαίδευση, Γενικό Λύκειο-ΕΠΑΛ) και είναι διαδικτυακά στο δικτυακό τόπο του Ινστιτούτου Εκπαιδευτικής Πολιτικής (Ι.Ε.Π.) στη διεύθυνση <a href="https://www.iep.edu.gr/trapeza-thematon-arxiki-selida/" target="_blank" rel="noopener">https://www.iep.edu.gr/trapeza-thematon-arxiki-selida/</a>';
+function showInfo() { dialog('Ενημερωτικό σημείωμα', INFO, [['Κλείσιμο', null]]); }
 ROUTES.home = app => {
   setBar('Τράπεζα θεμάτων · Ναυσιπλοΐα Ι', false);
   const nm = mistakes().length;
@@ -546,7 +551,8 @@ ROUTES.home = app => {
       el('div', { class: 'k' }, 'Β΄ ΕΠΑ.Λ. · Τομέας Ναυτιλιακών'),
       el('h1', {}, 'Ναυσιπλοΐα Ι – Ναυτική Μετεωρολογία'),
       el('div', {}, 'Εξάσκηση με την τράπεζα θεμάτων'),
-      el('div', { class: 'who' }, AUTHOR)),
+      el('div', { class: 'who' }, AUTHOR),
+      el('button', { class: 'info', onclick: showInfo }, 'ℹ️ Ενημερωτικό σημείωμα')),
     el('div', { class: 'tiles' },
       tile('🧭', 'Εξάσκηση', 'Διάλεξε κεφάλαια και δες αμέσως αν απάντησες σωστά', () => go('practice')),
       tile('📝', 'Διαγώνισμα', 'Θέματα Α, Β, Γ, Δ όπως στις εξετάσεις, ή γρήγορο τεστ', () => go('exam')),
